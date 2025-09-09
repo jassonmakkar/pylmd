@@ -1,0 +1,10 @@
+jupyter
+scanpy
+anndata
+numpy
+scipy
+pandas
+matplotlib
+seaborn
+scikit-learn
+rapids-singlecell
