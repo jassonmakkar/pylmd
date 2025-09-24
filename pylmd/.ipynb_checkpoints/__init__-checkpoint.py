@@ -1,3 +1,5 @@
-from .lmd import lmd
+__version__ = "0.1.0"
 
-__all__ = ["lmd"]
+from .lmd import pyLMD
+
+__all__ = ["pyLMD"]

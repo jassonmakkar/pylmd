@@ -514,7 +514,7 @@ def pyLMD(path, max_time = 2**20, device = 'cpu', preprocess = True):
         Dictionary with:
             'genes': List of genes above knee point threshold.
             'score_df' : Dataframe of scores at each timepoint and max score for each gene.
-            'norm_df' :  Dataframe of normalized scores.
+            'norm_scores' :  Dataframe of normalized scores (for plotting functions).
             'W' : Affinity matrix.
             'P_ls' : Diffusion operators.
             'rho' : Initial state for each gene.
@@ -528,11 +528,14 @@ def pyLMD(path, max_time = 2**20, device = 'cpu', preprocess = True):
         
     xsc = device_libs['xsc']
 
-    adata = sc.read_h5ad(path)
+    if path.endswith('.h5ad'):
+        adata = sc.read_h5ad(path)
+    if path.endswith('.h5'):
+        adata = sc.read_10x_h5(path)
     adata.var_names_make_unique()
 
     if device == 'gpu':
-        rsc.get.anndata_to_GPU(adata)
+        xsc.get.anndata_to_GPU(adata)
         
     if preprocess:
         xsc.pp.filter_cells(adata, min_genes=100)
@@ -560,7 +563,7 @@ def pyLMD(path, max_time = 2**20, device = 'cpu', preprocess = True):
         xsc.pp.scale(adata,max_value=10)
         xsc.tl.pca(adata)
         if device == 'gpu':
-            rsc.get.anndata_to_CPU(adata)
+            xsc.get.anndata_to_CPU(adata)
         xsc.pp.neighbors(adata)
         xsc.tl.umap(adata)
     
@@ -599,15 +602,15 @@ def pyLMD(path, max_time = 2**20, device = 'cpu', preprocess = True):
     LMDs = list(lmd_scores.sort_values()[:knee].index)
 
     lmd = {
-            'genes': LMDs
-            'score_df' : score_df
-            'norm_df' :  norm_df
-            'W' : w
-            'P_ls' : P_ls
-            'rho' : rho
-            'dat' : dat
-            'adata' : adata
-            'knee' : knee
+            'genes': LMDs,
+            'score_df' : score_df,
+            'norm_scores' :  norm_scores,
+            'W' : W,
+            'P_ls' : P_ls,
+            'rho' : rho,
+            'dat' : dat,
+            'adata' : adata,
+            'knee' : knee,
             }
     
     return lmd
