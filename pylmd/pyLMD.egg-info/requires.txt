@@ -1,9 +1,0 @@
-networkx>=2.8
-typing-extensions>=4.6
-
-[gpu]
-
-[gpu:platform_system != "Windows"]
-cupy-cuda11x
-cuml-cu11
-cugraph-cu11

@@ -5,7 +5,6 @@ from scipy.cluster.hierarchy import linkage, leaves_list
 from scipy.sparse.linalg import eigsh
 from sklearn.preprocessing import normalize
 from sklearn.metrics import pairwise_distances
-
 import dynamicTreeCut
 
 def CalculateGeneDistance(dat: pd.DataFrame, method = 'pearson'):

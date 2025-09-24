@@ -19,7 +19,18 @@ import seaborn as sns
 import warnings
 
 def get_xp(device: str = "cpu"):
-    if device == "gpu":
+    """
+    Determines which libraries should be imported and used based on device preference.
+    """
+    
+    if device == 'gpu':
+        import cupy as cp
+        import cudf
+        from cupyx.scipy import sparse as csp
+        from cupyx.scipy.stats import entropy as cen
+        import cudf as cd
+        import rapids_singlecell as rsc
+
         device_libs = {
             'device' : 'gpu',
             'xp' : cp,
@@ -28,8 +39,12 @@ def get_xp(device: str = "cpu"):
             'xen' : cen,
             'xdf' : cd
         }
+
         return device_libs
+        
     elif device == "cpu":
+        print('WARNING: Only running on CPU, please ensure this is intended.')
+
         device_libs = {
             'device' : 'cpu',
             'xp' : np,
@@ -38,13 +53,19 @@ def get_xp(device: str = "cpu"):
             'xen' : sen,
             'xdf' : pd
         }
+        
         return device_libs
+        
     else:
         raise ValueError(
             "Device should either be CPU or GPU."
         )
 
 def build_network(X, n_neighbors):
+    """
+    Build affinity matrix from given feature space. (Default = top 20 PCs)
+    """
+    
     Xnp = X if isinstance(X, np.ndarray) else X.A if hasattr(X, "A") else np.asarray(X)
     nn = NearestNeighbors(n_neighbors=n_neighbors + 1, metric="euclidean").fit(Xnp)
     inds = nn.kneighbors(Xnp, return_distance=False)
@@ -53,6 +74,7 @@ def build_network(X, n_neighbors):
     data = np.ones(rows.shape[0], dtype=np.float32)
     W = sp.csr_matrix((data, (rows, cols)), shape=(Xnp.shape[0], Xnp.shape[0]))
     W = W.maximum(W.T)
+    
     return W
 
 def visualize_network(
@@ -62,8 +84,8 @@ def visualize_network(
 ):
     """
     Plot a graph using:
-      - affinity/adjacency matrix (sym, possibly sparse)
-      - 2D visual space from adata.obsm[layout_key]
+      - affinity matrix
+      - 2D visual space from adata.obsm[layout_key] (Default: X_umap)
       
     """
     if type(W) != sp.csr_matrix:
@@ -128,8 +150,7 @@ def visualize_network(
 
 def rowwise_normalize(dat, W):
     """
-    Row-normalize a genes x cells matrix, restricted to cells in W (matching column order).
-    
+    Row-normalize a genes x cells matrix.
     """
     
     # figure out cell order from W
@@ -164,7 +185,6 @@ def rowwise_normalize(dat, W):
 def doubly_stochastic(W, device_libs, max_iter: int = 100, tol: float = 1e-6):
     """
     Convert a symmetric affinity matrix to a doubly stochastic matrix using the Sinkhorn-Knopp algorithm.
-    
     """
 
     xp = device_libs['xp']
@@ -190,8 +210,7 @@ def construct_diffusion_operators(
     max_time    
 ):
     """
-    Constructs a list of diffusion operators for a given symmetric affinity matrix of a graph.
-    
+    Constructs a list of diffusion operators for a given symmetric affinity matrix.
     """
     
     xp = device_libs['xp']
@@ -336,6 +355,9 @@ def calculate_score_profile(
     P_ls,
     device_libs
 ):
+    """
+    Calculates the KL score (scipy entropy) of each gene at each timepoint in the diffusion process.
+    """
     
     xp = device_libs['xp']
     xen = device_libs['xen']
@@ -411,6 +433,9 @@ def visualize_score_pattern(
     genes,
     figsize=(10, 6)
 ):
+    """
+    Visualize KL score for a set of genes.
+    """
 
     # Validate genes
     genes = list(genes)
@@ -472,50 +497,46 @@ def find_knee(lmd_scores):
 
     return knee
 
-def pyLMD(path, max_time = 2**20, device = 'cpu'):
+def pyLMD(path, max_time = 2**20, device = 'cpu', preprocess = True):
+    """
+    Wrapped function for running pyLMD in a single step.
+
+    Performs:
+        - Device-based library imports
+        - Reads in Anndata object from path
+        - [Optional] Performs filtering and normalization preprocessing steps
+        - Builds network graph of cells and affinity matrix
+        - Constructs diffusion operators for each dyadic timepoint
+        - Scores each gene based on rate of diffusion
+        - Finds knee point within plot of LMD scores
+
+    Returns:
+        Dictionary with:
+            'genes': List of genes above knee point threshold.
+            'score_df' : Dataframe of scores at each timepoint and max score for each gene.
+            'norm_df' :  Dataframe of normalized scores.
+            'W' : Affinity matrix.
+            'P_ls' : Diffusion operators.
+            'rho' : Initial state for each gene.
+            'dat' : Raw gene expression values.
+            'adata' : Anndata object.
+            'knee' : Knee point value.
     
-    if device == 'gpu':
-        import cupy as cp
-        import cudf
-        from cupyx.scipy import sparse as csp
-        from cupyx.scipy.stats import entropy as cen
-        import cudf as cd
-        import rapids_singlecell as rsc
-
-        device_libs = {
-            'device' : 'gpu',
-            'xp' : cp,
-            'xsc' : rsc,
-            'xsp' : csp,
-            'xen' : cen,
-            'xdf' : cd
-        }
-        
-    elif device == "cpu":
-        print('WARNING: Only running on CPU, please ensure this is intended.')
-
-        device_libs = {
-            'device' : 'cpu',
-            'xp' : np,
-            'xsc' : sc,
-            'xsp' : sp,
-            'xen' : sen,
-            'xdf' : pd
-        }
-        
-    else:
-        raise ValueError("Device should either be CPU or GPU.")
+    """
+    
+    device_libs = get_xp(device)
         
     xsc = device_libs['xsc']
 
-    adata = sc.read_10x_h5(path)
+    adata = sc.read_h5ad(path)
     adata.var_names_make_unique()
 
     if device == 'gpu':
         rsc.get.anndata_to_GPU(adata)
-    
-    xsc.pp.filter_cells(adata, min_genes=100)
-    xsc.pp.filter_genes(adata, min_cells=3)
+        
+    if preprocess:
+        xsc.pp.filter_cells(adata, min_genes=100)
+        xsc.pp.filter_genes(adata, min_cells=3)
     
     raw_adata = adata.copy()
     
@@ -531,16 +552,17 @@ def pyLMD(path, max_time = 2**20, device = 'cpu'):
             index=adata.var_names,       # genes
             columns=adata.obs_names      # cells
         )
-    
-    xsc.pp.normalize_total(adata)
-    xsc.pp.log1p(adata)
-    xsc.pp.highly_variable_genes(adata, n_top_genes=2000)
-    xsc.pp.scale(adata,max_value=10)
-    xsc.tl.pca(adata)
-    if device == 'gpu':
-        rsc.get.anndata_to_CPU(adata)
-    xsc.pp.neighbors(adata)
-    xsc.tl.umap(adata)
+
+    if preprocess:
+        xsc.pp.normalize_total(adata)
+        xsc.pp.log1p(adata)
+        xsc.pp.highly_variable_genes(adata, n_top_genes=2000)
+        xsc.pp.scale(adata,max_value=10)
+        xsc.tl.pca(adata)
+        if device == 'gpu':
+            rsc.get.anndata_to_CPU(adata)
+        xsc.pp.neighbors(adata)
+        xsc.tl.umap(adata)
     
     cell_medians = np.median(dat, axis=0)
     mask = dat > cell_medians
@@ -576,7 +598,16 @@ def pyLMD(path, max_time = 2**20, device = 'cpu'):
     
     LMDs = list(lmd_scores.sort_values()[:knee].index)
 
-    return LMDs
-
-
-#
+    lmd = {
+            'genes': LMDs
+            'score_df' : score_df
+            'norm_df' :  norm_df
+            'W' : w
+            'P_ls' : P_ls
+            'rho' : rho
+            'dat' : dat
+            'adata' : adata
+            'knee' : knee
+            }
+    
+    return lmd
