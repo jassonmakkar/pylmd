@@ -1,6 +1,48 @@
 from __future__ import annotations
-from .utils import get_xp, np_as_dense
+from .utils import np_as_dense
 from typing import Optional, Dict, Any
+import scanpy as sc
+import numpy as np
+import pandas as pd
+import sys
+import os
+import time
+import scipy.sparse as sp
+from scipy.stats import entropy as sen
+from sklearn.neighbors import NearestNeighbors
+from scipy.sparse import csr_matrix
+import networkx as nx
+import matplotlib.pyplot as plt
+from matplotlib.colors import LinearSegmentedColormap
+import re
+import seaborn as sns
+import warnings
+
+def get_xp(device: str = "cpu"):
+    if device == "gpu":
+        device_libs = {
+            'device' : 'gpu',
+            'xp' : cp,
+            'xsc' : rsc,
+            'xsp' : csp,
+            'xen' : cen,
+            'xdf' : cd
+        }
+        return device_libs
+    elif device == "cpu":
+        device_libs = {
+            'device' : 'cpu',
+            'xp' : np,
+            'xsc' : sc,
+            'xsp' : sp,
+            'xen' : sen,
+            'xdf' : pd
+        }
+        return device_libs
+    else:
+        raise ValueError(
+            "Device should either be CPU or GPU."
+        )
 
 def build_network(X, n_neighbors):
     Xnp = X if isinstance(X, np.ndarray) else X.A if hasattr(X, "A") else np.asarray(X)
@@ -119,13 +161,13 @@ def rowwise_normalize(dat, W):
     
     return pd.DataFrame(rho, index=np.array(gene_names)[keep], columns=cell_names)
 
-def doubly_stochastic(W, device, max_iter: int = 100, tol: float = 1e-6):
+def doubly_stochastic(W, device_libs, max_iter: int = 100, tol: float = 1e-6):
     """
     Convert a symmetric affinity matrix to a doubly stochastic matrix using the Sinkhorn-Knopp algorithm.
     
     """
 
-    xp = get_xp(device)
+    xp = device_libs['xp']
     
     r = xp.ones((W.shape[0], 1), dtype=W.dtype)
     c = xp.ones((1, W.shape[1]), dtype=W.dtype)
@@ -144,7 +186,7 @@ def doubly_stochastic(W, device, max_iter: int = 100, tol: float = 1e-6):
 
 def construct_diffusion_operators(
     W, 
-    device,
+    device_libs,
     max_time    
 ):
     """
@@ -152,8 +194,8 @@ def construct_diffusion_operators(
     
     """
     
-    xp = get_xp(device)
-    xsp = get_xsp(device)
+    xp = device_libs['xp']
+    xsp = device_libs['xsp']
     
     print("Creating diffusion operators...")
 
@@ -164,7 +206,7 @@ def construct_diffusion_operators(
 
     W_dense = xp.asarray(W_dense)
     
-    P = doubly_stochastic(W_dense, device)
+    P = doubly_stochastic(W_dense, device_libs)
     
     n = P.shape[0]
     
@@ -292,12 +334,12 @@ def calculate_score_profile(
     W,
     rho,
     P_ls,
-    device
+    device_libs
 ):
     
-    xp = get_xp(device)
-    xen = get_xen(device)
-    xdf = get_xdf(device)
+    xp = device_libs['xp']
+    xen = device_libs['xen']
+    xdf = device_libs['xdf']
     
     Wn = W.shape[0]
 
@@ -328,7 +370,7 @@ def calculate_score_profile(
     score_df = xdf.concat(per_time_frames, axis=1)
     score_df.index = gene_names
 
-    if device == 'gpu':
+    if device_libs['device'] == 'gpu':
         X, final_state = xp.broadcast_arrays(X, final_state) # array broadcast not internally managed in cupy
     
     max_score = xen(X, final_state, axis=1)
@@ -337,7 +379,7 @@ def calculate_score_profile(
     
     score_df = xdf.concat([score_df, max_df], axis=1)
 
-    if device == 'gpu':
+    if device_libs['device'] == 'gpu':
         score_df = score_df.to_pandas()
 
     return score_df
@@ -439,12 +481,32 @@ def pyLMD(path, max_time = 2**20, device = 'cpu'):
         from cupyx.scipy.stats import entropy as cen
         import cudf as cd
         import rapids_singlecell as rsc
+
+        device_libs = {
+            'device' : 'gpu',
+            'xp' : cp,
+            'xsc' : rsc,
+            'xsp' : csp,
+            'xen' : cen,
+            'xdf' : cd
+        }
+        
     elif device == "cpu":
         print('WARNING: Only running on CPU, please ensure this is intended.')
+
+        device_libs = {
+            'device' : 'cpu',
+            'xp' : np,
+            'xsc' : sc,
+            'xsp' : sp,
+            'xen' : sen,
+            'xdf' : pd
+        }
+        
     else:
         raise ValueError("Device should either be CPU or GPU.")
-
-    xsc = get_xsc(device)
+        
+    xsc = device_libs['xsc']
 
     adata = sc.read_10x_h5(path)
     adata.var_names_make_unique()
@@ -497,13 +559,13 @@ def pyLMD(path, max_time = 2**20, device = 'cpu'):
     
     rho = rowwise_normalize(dat, W)
     
-    P_ls = construct_diffusion_operators(W, device, max_time=max_time)
+    P_ls = construct_diffusion_operators(W, device_libs, max_time=max_time)
     
     score_df = calculate_score_profile(
         W = W,
         rho = rho,
         P_ls = P_ls,
-        device = device
+        device_libs = device_libs
     )
     
     norm_scores, lmd_scores = obtain_lmds(score_df)
