@@ -1,14 +1,10 @@
 import numpy as np
 import pandas as pd
-import scipy
-from scipy.spatial.distance import pdist, squareform, jaccard
-from scipy.stats import spearmanr, entropy
-from scipy.cluster.hierarchy import average
+from scipy.spatial.distance import squareform
+from scipy.cluster.hierarchy import linkage, leaves_list
+from scipy.sparse.linalg import eigsh
 from sklearn.preprocessing import normalize
 from sklearn.metrics import pairwise_distances
-from scipy.cluster.hierarchy import linkage, fcluster, leaves_list
-from scipy.sparse.linalg import eigsh
-from sklearn.cluster import DBSCAN
 
 import dynamicTreeCut
 
@@ -27,7 +23,6 @@ def CalculateGeneDistance(dat: pd.DataFrame, method = 'pearson'):
 
         - 'pearson': Pearson correlation distance (1 - correlation).
         - 'euclidean': Euclidean distance.
-        - 'KL': Kullback-Leibler divergence.
         - 'jaccard': Jaccard distance.
         - 'spearman': Spearman correlation distance (1 - correlation).
 
@@ -46,8 +41,6 @@ def CalculateGeneDistance(dat: pd.DataFrame, method = 'pearson'):
         dist = 1.0 - corr
     elif method == "euclidean":
         dist = pairwise_distances(rho_dat.values, metric="euclidean")
-    elif method == "KL":
-        pass
     elif method == "jaccard":
         dat_binary = (dat.values > 0)
         dist = pairwise_distances(dat_binary, metric="jaccard")
@@ -119,14 +112,14 @@ def ClusterGenes(dist, clustering_method = "average",
         # Relabel modules by dendrogram order
         leaf_order = leaves_list(gene_hree)
         label_pos = {dist.index[i]: pos for pos, i in enumerate(leaf_order)}
-        med_pos = gene_partition.groupby(gene_partition).apply(lambda idx: np.median([label_pos[g] for g in idx.index]))
-        # Alternative: med_pos = (gene_partition.index.to_series().map(label_pos).groupby(gene_partition).median().sort_values())
-        order = med_pos.sort_values().index.tolist()
-        gene_partition = gene_partition.cat.reorder_categories(order)
-        # Alternative: gene_partition = gene_partition.cat.reorder_categories(list(med_pos.index), ordered=True)
+        #med_pos = gene_partition.groupby(gene_partition).apply(lambda idx: np.median([label_pos[g] for g in idx.index]))
+        med_pos = (gene_partition.index.to_series().map(label_pos).groupby(gene_partition).median().sort_values())
+        #order = med_pos.sort_values().index.tolist()
+        #gene_partition = gene_partition.cat.reorder_categories(order)
+        gene_partition = gene_partition.cat.reorder_categories(list(med_pos.index), ordered=True)
         gene_partition = gene_partition.cat.rename_categories({cat: i+1 for i, cat in enumerate(gene_partition.cat.categories)})
 
-        # this is somewhat vibe-coded, warning
+        # Filter groups via SML-style eigen filter
         if filtered:
             D = dist.values
             S = 1.0 - D # D must be scaled to [0,1]
@@ -152,13 +145,5 @@ def ClusterGenes(dist, clustering_method = "average",
             gene_partition = gene_partition.cat.remove_unused_categories()
 
         return (gene_partition, gene_hree) if return_tree else gene_partition
-
-    elif clustering_method == "dbscan":
-        # model = DBSCAN(metric="precomputed", eps=0.5)
-        # labels = model.fit_predict(dist.values)
-        # return pd.Series(labels, index=dist.index, dtype="category")
-        pass
-    elif clustering_method == "hdbscan":
-        pass
     else:
         raise ValueError(f"Method not found: {clustering_method}")
