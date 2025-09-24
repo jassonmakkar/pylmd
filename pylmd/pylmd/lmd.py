@@ -2,24 +2,14 @@ from __future__ import annotations
 
 from typing import Optional, Dict, Any
 
-from .utils import (
-    get_xp,
-    asxp,
-    rowwise_normalize,
-    sinkhorn_bistochastic,
-    kl_divergence_rows,
-    matmul,
-    knee_point,
-)
+def get_xp(device: str = "auto"):
+    if device == "gpu" and cp is not None:
+        return cp
+    if device == "cpu":
+        return np
+    return cp if cp is not None else np
 
-
-def _to_dense(m):
-    if hasattr(m, "toarray"):
-        return m.toarray()
-    return m
-
-
-def _ensure_connectivities(adata, n_neighbors: int, use_rep: Optional[str], device: str):
+def build_connectivities(adata, n_neighbors: int, use_rep: Optional[str], device: str):
     if getattr(adata, "obsp", None) is not None and "connectivities" in adata.obsp:
         return adata.obsp["connectivities"]
     
