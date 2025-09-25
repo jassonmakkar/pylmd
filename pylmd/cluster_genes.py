@@ -97,7 +97,7 @@ def ClusterGenes(dist, clustering_method = "average",
     if clustering_method in ["single", "complete", "average", 
                              "weighted", "centroid", "median"]:
         gene_hree = linkage(squareform(dist.values, checks=False), method=clustering_method)
-        gene_partition = dynamicTreeCut.cutreeHybrid(
+        cut_result = dynamicTreeCut.cutreeHybrid(
             link=gene_hree, 
             distM=dist.values, 
             deepSplit=deepSplit, 
@@ -105,16 +105,19 @@ def ClusterGenes(dist, clustering_method = "average",
             pamRespectsDendro=True,
             minClusterSize=min_gene)
         
-        # Attach names
+        # Extract the labels properly
+        if isinstance(cut_result, dict):
+            gene_partition = cut_result['labels']
+        else:
+            gene_partition = np.asarray(cut_result).flatten()
+        
+        # Convert to pandas Series with proper index - THIS IS THE KEY LINE
         gene_partition = pd.Series(gene_partition, index=dist.index, dtype="category")
 
         # Relabel modules by dendrogram order
         leaf_order = leaves_list(gene_hree)
         label_pos = {dist.index[i]: pos for pos, i in enumerate(leaf_order)}
-        #med_pos = gene_partition.groupby(gene_partition).apply(lambda idx: np.median([label_pos[g] for g in idx.index]))
         med_pos = (gene_partition.index.to_series().map(label_pos).groupby(gene_partition).median().sort_values())
-        #order = med_pos.sort_values().index.tolist()
-        #gene_partition = gene_partition.cat.reorder_categories(order)
         gene_partition = gene_partition.cat.reorder_categories(list(med_pos.index), ordered=True)
         gene_partition = gene_partition.cat.rename_categories({cat: i+1 for i, cat in enumerate(gene_partition.cat.categories)})
 
