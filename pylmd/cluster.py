@@ -8,7 +8,7 @@ from sklearn.preprocessing import normalize
 from sklearn.metrics import pairwise_distances
 import dynamicTreeCut
 
-def CalculateGeneDistance(dat: pd.DataFrame, method = 'pearson'):
+def distance(dat: pd.DataFrame, method = 'pearson'):
     """
     Calculate Gene Pairwise Distance.
 
@@ -52,7 +52,7 @@ def CalculateGeneDistance(dat: pd.DataFrame, method = 'pearson'):
     return pd.DataFrame(dist, index=labels, columns=labels)
 
 
-def ClusterGenes(dist, clustering_method = "average", 
+def modules(dist, clustering_method = "average", 
                  min_gene = 10, deepSplit = 2,
                  return_tree = False, 
                  filtered = True, accu = 0.75):
@@ -146,7 +146,8 @@ def ClusterGenes(dist, clustering_method = "average",
                     keep.extend(keep_genes)
             gene_partition = gene_partition.loc[keep]
             gene_partition = gene_partition.cat.remove_unused_categories()
+            gene_sets = gene_partition.groupby(gene_partition).apply(lambda x: x.index.tolist()).to_dict()
 
-        return (gene_partition, gene_hree) if return_tree else gene_partition
+        return (gene_sets, gene_hree) if return_tree else gene_sets
     else:
         raise ValueError(f"Method not found: {clustering_method}")
