@@ -10,3 +10,5 @@ scikit-learn
 scipy==1.15.3
 seaborn
 umap-learn==0.5.7
+pooch
+dynamicTreeCut
