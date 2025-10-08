@@ -34,6 +34,11 @@ Based on this diffusion pattern, genes can be scored and ranked to identify loca
 
 <img src="./img/DiffusionRanking.png" width="100%" height="auto" />
 
+<<<<<<< HEAD
 When looking at another sample dataset with various cell types and sample sources, we can utilize LMD to gene modules that highlight cell types, similar cell states across cell types, and sample-specific characteristics.
+=======
+When looking at another sample dataset with various cell types and sample sources, LMD can be utilized to construct gene modules that highlight cell type specific markers, similar cell states across cell types, and sample-specific characteristics.
+>>>>>>> 7ef4ad0a560731a55cd0da37db049c2966ccbf50
 
 <img src="./img/GeneModules.png" width="100%" height="auto" />
+
