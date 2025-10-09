@@ -6,21 +6,26 @@ This package performs Localized Marker Detection (LMD) via Python (with GPU Acce
 The inspiration for this project can be found at: https://www.nature.com/articles/s42003-025-08485-y.
 
 To launch in brev.dev, please use the RAPIDS-single cell instance and run: 
+```
 apt-get update
 apt-get install git
 git clone https://github.com/jassonmakkar/pylmd.git
 cd pylmd
 pip install -e .
+```
 
 If running locally or other cloud service, please ensure that CUDA is functioning (run nvidia-smi & nvcc) prior to installation of GPU version of this package. Then clone the github repo and install:
+```
 git clone https://github.com/jassonmakkar/pylmd.git
 cd pylmd
 pip install -e .
+```
 
 To run in single step:
+```
 from pylmd import lmd
 LMDs = lmd.pyLMD(path, max_time = max_time, device = 'gpu')
-
+```
 This function first performs preprocessing of the h5 / h5ad file and builds a UMAP. This object is then used to build a cell-cell affinity graph to connect similar cells across the network, enabling diffusion across these connections.
 
 <img src="./img/CellNetwork.png" width="100%" height="auto" />
